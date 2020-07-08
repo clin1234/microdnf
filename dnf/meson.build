@@ -12,6 +12,15 @@ microdnf_srcs = [
   ),
   'plugins/install/dnf-command-install.c',
 
+  # reinstall
+  gnome.compile_resources(
+    'dnf-reinstall',
+    'plugins/reinstall/dnf-command-reinstall.gresource.xml',
+    c_name : 'dnf_command_reinstall',
+    source_dir : 'plugins/reinstall',
+  ),
+  'plugins/reinstall/dnf-command-reinstall.c',
+
   # remove
   gnome.compile_resources(
     'dnf-remove',
@@ -30,6 +39,24 @@ microdnf_srcs = [
   ),
   'plugins/update/dnf-command-update.c',
 
+  # repolist
+  gnome.compile_resources(
+    'dnf-repolist',
+    'plugins/repolist/dnf-command-repolist.gresource.xml',
+    c_name : 'dnf_command_repolist',
+    source_dir : 'plugins/repolist',
+  ),
+  'plugins/repolist/dnf-command-repolist.c',
+
+  # repoquery
+  gnome.compile_resources(
+    'dnf-repoquery',
+    'plugins/repoquery/dnf-command-repoquery.gresource.xml',
+    c_name : 'dnf_command_repoquery',
+    source_dir : 'plugins/repoquery',
+  ),
+  'plugins/repoquery/dnf-command-repoquery.c',
+
   # clean
   gnome.compile_resources(
     'dnf-clean',
@@ -40,7 +67,7 @@ microdnf_srcs = [
   'plugins/clean/dnf-command-clean.c',
 ]
 
-executable(
+microdnf = executable(
   'microdnf',
   sources : microdnf_srcs,
   dependencies : [

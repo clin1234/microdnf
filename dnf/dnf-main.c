@@ -3,7 +3,7 @@
  * Copyright © 2010-2015 Richard Hughes <richard@hughsie.com>
  * Copyright © 2016 Colin Walters <walters@verbum.org>
  * Copyright © 2016-2017 Igor Gnatenko <ignatenko@redhat.com>
- * Copyright © 2017 Jaroslav Rohel <jrohel@redhat.com>
+ * Copyright © 2017-2020 Jaroslav Rohel <jrohel@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,16 +21,31 @@
 
 #include <locale.h>
 #include <stdlib.h>
+#include <string.h>
 #include <glib.h>
 #include <libpeas/peas.h>
 #include <libdnf/libdnf.h>
 #include "dnf-command.h"
 
+typedef enum { ARG_DEFAULT, ARG_FALSE, ARG_TRUE } BoolArgs;
+
+static BoolArgs opt_install_weak_deps = ARG_DEFAULT;
 static gboolean opt_yes = TRUE;
 static gboolean opt_nodocs = FALSE;
+static gboolean opt_best = FALSE;
+static gboolean opt_nobest = FALSE;
+static gboolean opt_test = FALSE;
+static gboolean opt_refresh = FALSE;
 static gboolean show_help = FALSE;
 static gboolean dl_pkgs_printed = FALSE;
 static GSList *enable_disable_repos = NULL;
+static gboolean disable_plugins_loading = FALSE;
+static gboolean config_used = FALSE;
+static gboolean enable_disable_plugin_used = FALSE;
+static gboolean installroot_used = FALSE;
+static gboolean cachedir_used = FALSE;
+static gboolean reposdir_used = FALSE;
+static gboolean varsdir_used = FALSE;
 
 static gboolean
 process_global_option (const gchar  *option_name,
@@ -42,7 +57,12 @@ process_global_option (const gchar  *option_name,
   DnfContext *ctx = DNF_CONTEXT (data);
 
   gboolean ret = TRUE;
-  if (g_strcmp0 (option_name, "--disablerepo") == 0)
+  if (g_strcmp0 (option_name, "--config") == 0)
+    {
+      config_used = TRUE;
+      dnf_context_set_config_file_path (value);
+    }
+  else if (g_strcmp0 (option_name, "--disablerepo") == 0)
     {
       enable_disable_repos = g_slist_append (enable_disable_repos, g_strconcat("d", value, NULL));
     }
@@ -50,15 +70,112 @@ process_global_option (const gchar  *option_name,
     {
       enable_disable_repos = g_slist_append (enable_disable_repos, g_strconcat("e", value, NULL));
     }
+  else if (g_strcmp0 (option_name, "--disableplugin") == 0)
+    {
+      g_auto(GStrv) patterns = g_strsplit (value, ",", -1);
+      for (char **it = patterns; *it; ++it)
+        dnf_context_disable_plugins (*it);
+      enable_disable_plugin_used = TRUE;
+    }
+  else if (g_strcmp0 (option_name, "--enableplugin") == 0)
+    {
+      g_auto(GStrv) patterns = g_strsplit (value, ",", -1);
+      for (char **it = patterns; *it; ++it)
+        dnf_context_enable_plugins (*it);
+      enable_disable_plugin_used = TRUE;
+    }
+  else if (g_strcmp0 (option_name, "--installroot") == 0)
+    {
+      installroot_used = TRUE;
+      if (value[0] != '/')
+        {
+          local_error = g_error_new (G_OPTION_ERROR,
+                                     G_OPTION_ERROR_BAD_VALUE,
+                                     "Absolute path must be used");
+          ret = FALSE;
+        }
+      else
+        {
+          dnf_context_set_install_root (ctx, value);
+        }
+    }
   else if (g_strcmp0 (option_name, "--releasever") == 0)
     {
       dnf_context_set_release_ver (ctx, value);
     }
   else if (g_strcmp0 (option_name, "--setopt") == 0)
     {
-      if (g_strcmp0 (value, "tsflags=nodocs") == 0)
+      g_auto(GStrv) setopt = g_strsplit (value, "=", 2);
+      if (!setopt[0] || !setopt[1])
         {
-          opt_nodocs = TRUE;
+          local_error = g_error_new (G_OPTION_ERROR,
+                                     G_OPTION_ERROR_BAD_VALUE,
+                                     "Missing value in: %s", value);
+          ret = FALSE;
+        }
+      else if (strcmp (setopt[0], "tsflags") == 0)
+        {
+          g_auto(GStrv) tsflags = g_strsplit (setopt[1], ",", -1);
+          for (char **it = tsflags; *it; ++it)
+            {
+              if (strcmp (*it, "nodocs") == 0)
+                opt_nodocs = TRUE;
+              else if (strcmp (*it, "test") == 0)
+                opt_test = TRUE;
+              else
+                {
+                  local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                            "Unknown tsflag: %s", *it);
+                  ret = FALSE;
+                  break;
+                }
+            }
+        }
+      else if (strcmp (setopt[0], "cachedir") == 0)
+        {
+          cachedir_used = TRUE;
+          const char *cachedir = setopt[1];
+          if (cachedir[0] != '\0')
+            {
+              g_autofree gchar *metadatadir = g_build_path ("/", cachedir, "metadata", NULL);
+              dnf_context_set_cache_dir (ctx, metadatadir);
+              g_autofree gchar *solvdir = g_build_path ("/", cachedir, "solv", NULL);
+              dnf_context_set_solv_dir (ctx, solvdir);
+              g_autofree gchar *lockdir = g_build_path ("/", cachedir, "lock", NULL);
+              dnf_context_set_lock_dir (ctx, lockdir);
+            }
+          else
+            {
+              local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                         "Empty value in: %s", value);
+              ret = FALSE;
+            }
+        }
+      else if (strcmp (setopt[0], "install_weak_deps") == 0)
+        {
+          const char *setopt_val = setopt[1];
+          if (setopt_val[0] == '1' && setopt_val[1] == '\0')
+            opt_install_weak_deps = ARG_TRUE;
+          else if (setopt_val[0] == '0' && setopt_val[1] == '\0')
+            opt_install_weak_deps = ARG_FALSE;
+          else
+            {
+              local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                         "Invalid boolean value \"%s\" in: %s", setopt[1], value);
+              ret = FALSE;
+            }
+        }
+      else if (strcmp (setopt[0], "reposdir") == 0)
+        {
+          reposdir_used = TRUE;
+          g_auto(GStrv) reposdir = g_strsplit (setopt[1], ",", -1);
+          dnf_context_set_repos_dir (ctx, (const gchar * const *)reposdir);
+        }
+      else if (strcmp (setopt[0], "varsdir") == 0)
+        {
+          varsdir_used = TRUE;
+          g_auto(GStrv) varsdir = g_strsplit (setopt[1], ",", -1);
+          dnf_context_set_vars_dir (ctx, (const gchar * const *)varsdir);
         }
       else
         {
@@ -82,11 +199,20 @@ process_global_option (const gchar  *option_name,
 
 static const GOptionEntry global_opts[] = {
   { "assumeyes", 'y', G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &opt_yes, "Does nothing, we always assume yes", NULL },
+  { "best", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_best, "Try the best available package versions in transactions", NULL },
+  { "config", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Configuration file location", "<config file>" },
   { "disablerepo", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Disable repository by an id", "ID" },
+  { "disableplugin", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Disable plugins by name", "name" },
   { "enablerepo", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Enable repository by an id", "ID" },
+  { "enableplugin", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Enable plugins by name", "name" },
+  { "nobest", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_nobest, "Do not limit the transaction to the best candidates", NULL },
+  { "installroot", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Set install root", "PATH" },
   { "nodocs", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_nodocs, "Install packages without docs", NULL },
+  { "noplugins", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &disable_plugins_loading, "Disable loading of plugins", NULL },
+  { "refresh", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_refresh, "Set metadata as expired before running the command", NULL },
   { "releasever", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Override the value of $releasever in config and repo files", "RELEASEVER" },
-  { "setopt", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Set transaction flag, like tsflags=nodocs", "FLAG" },
+  { "setopt", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option,
+    "Override a configuration option (install_weak_deps=0/1, cachedir=<path>, reposdir=<path1>,<path2>,..., tsflags=nodocs/test, varsdir=<path1>,<path2>,...)", "<option>=<value>" },
   { NULL }
 };
 
@@ -95,7 +221,6 @@ context_new (void)
 {
   DnfContext *ctx = dnf_context_new ();
 
-  dnf_context_set_repo_dir (ctx, "/etc/yum.repos.d/");
 #define CACHEDIR "/var/cache/yum"
   dnf_context_set_cache_dir (ctx, CACHEDIR"/metadata");
   dnf_context_set_solv_dir (ctx, CACHEDIR"/solv");
@@ -104,7 +229,13 @@ context_new (void)
   dnf_context_set_check_disk_space (ctx, FALSE);
   dnf_context_set_check_transaction (ctx, TRUE);
   dnf_context_set_keep_cache (ctx, FALSE);
-  dnf_context_set_cache_age (ctx, 0);
+
+  /* Sets a maximum cache age in seconds. It is an upper limit.
+   * The lower value between this value and "metadata_expire" value from repo/global
+   * configuration file is used.
+   * The value G_MAXUINT has a special meaning. It means that the cache never expires
+   * regardless of the settings in the configuration files. */
+  dnf_context_set_cache_age (ctx, G_MAXUINT - 1); 
 
   return ctx;
 }
@@ -117,38 +248,45 @@ state_action_changed_cb (DnfState       *state,
   switch (action)
     {
       case DNF_STATE_ACTION_DOWNLOAD_METADATA:
-        g_print("Downloading metadata...\n");
+        g_print ("Downloading metadata...\n");
         break;
       case DNF_STATE_ACTION_DOWNLOAD_PACKAGES:
         if (!dl_pkgs_printed)
           {
-            g_print("Downloading packages...\n");
+            g_print ("Downloading packages...\n");
             dl_pkgs_printed = TRUE;
           }
         break;
       case DNF_STATE_ACTION_TEST_COMMIT:
-        g_print("Running transaction test...\n");
+        g_print ("Running transaction test...\n");
         break;
       case DNF_STATE_ACTION_INSTALL:
-        g_print("Installing: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Installing: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_REMOVE:
-        g_print("Removing: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Removing: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_UPDATE:
-        g_print("Updating: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Updating: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_OBSOLETE:
-        g_print("Obsoleting: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Obsoleting: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_REINSTALL:
-        g_print("Reinstalling: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Reinstalling: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_DOWNGRADE:
-        g_print("Downgrading: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Downgrading: %s\n", action_hint);
         break;
       case DNF_STATE_ACTION_CLEANUP:
-        g_print("Cleanup: %s\n", action_hint);
+        if (action_hint)
+          g_print ("Cleanup: %s\n", action_hint);
         break;
       default:
         break;
@@ -215,7 +353,11 @@ main (int   argc,
       if (!peas_engine_load_plugin (engine, info))
         continue;
       if (peas_engine_provides_extension (engine, info, DNF_TYPE_COMMAND))
-        g_string_append_printf (cmd_summary, "\n  %s - %s", peas_plugin_info_get_name (info), peas_plugin_info_get_description (info));
+        /*
+         * At least 2 spaces between the command and its description are needed
+         * so that help2man formats it correctly.
+         */
+        g_string_append_printf (cmd_summary, "\n  %-16s     %s", peas_plugin_info_get_name (info), peas_plugin_info_get_description (info));
     }
   g_option_context_set_summary (opt_ctx, cmd_summary->str);
   g_string_free (cmd_summary, TRUE);
@@ -249,6 +391,32 @@ main (int   argc,
    */
   if (!show_help)
     {
+      if (installroot_used &&
+          !(config_used && disable_plugins_loading && cachedir_used && reposdir_used && varsdir_used))
+        {
+          error = g_error_new_literal (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+            "The \"--installroot\" argument must be used together with \"--config\", "
+            "\"--noplugins\", \"--setopt=cachedir=<path>\", \"--setopt=reposdir=<path>\", "
+            "\"--setopt=varsdir=<path>\" arguments.");
+          goto out;
+        }
+        
+      if (disable_plugins_loading)
+        dnf_context_set_plugins_all_disabled (disable_plugins_loading);
+
+      if (enable_disable_plugin_used && dnf_context_get_plugins_all_disabled ())
+        {
+          if (disable_plugins_loading)
+            g_print ("Loading of plugins is disabled by command line argument \"--noplugins\". "
+                     "Use of \"--enableplugin\" and \"--disableplugin\" has no meaning.\n");
+          else
+            g_print ("Loading of plugins is disabled by configuration file. "
+                     "Use of \"--enableplugin\" and \"--disableplugin\" has no meaning.\n");
+        }
+
+      if (opt_refresh)
+       dnf_context_set_cache_age (ctx, 0);
+
       if (!dnf_context_setup (ctx, NULL, &error))
         goto out;
       DnfState *state = dnf_context_get_state (ctx);
@@ -268,11 +436,38 @@ main (int   argc,
             goto out;
         }
 
+      /* set transaction flags, allow downgrades for all transaction types */
+      DnfTransaction *txn = dnf_context_get_transaction (ctx);
+      int flags = dnf_transaction_get_flags (txn) | DNF_TRANSACTION_FLAG_ALLOW_DOWNGRADE;
       if (opt_nodocs)
+        flags |= DNF_TRANSACTION_FLAG_NODOCS;
+      if (opt_test)
+        flags |= DNF_TRANSACTION_FLAG_TEST;
+      dnf_transaction_set_flags (txn, flags);
+      
+      /* Disable calling dnf_goal_depsolve() during dnf_context_run().
+       * The calling is done with hardcoded parameters. We dont want it. */
+      dnf_transaction_set_dont_solve_goal(txn, TRUE);
+
+      if (opt_install_weak_deps == ARG_TRUE)
+        dnf_context_set_install_weak_deps (TRUE);
+      else if (opt_install_weak_deps == ARG_FALSE)
+        dnf_context_set_install_weak_deps (FALSE);
+
+      if (opt_best && opt_nobest)
         {
-          DnfTransaction *txn = dnf_context_get_transaction (ctx);
-          dnf_transaction_set_flags (txn,
-                                     dnf_transaction_get_flags (txn) | DNF_TRANSACTION_FLAG_NODOCS);
+          error = g_error_new_literal(G_OPTION_ERROR,
+                                      G_OPTION_ERROR_BAD_VALUE,
+                                      "Argument --nobest is not allowed with argument --best");
+          goto out;
+        }
+      if (opt_best)
+        {
+          dnf_context_set_best(TRUE);
+        }
+      else if (opt_nobest)
+        {
+          dnf_context_set_best(FALSE);
         }
     }
 
@@ -294,7 +489,10 @@ main (int   argc,
 
   if (cmd_name == NULL && show_help)
     {
-      g_set_prgname (argv[0]);
+      const char *prg_name = strrchr(argv[0], '/');
+      prg_name = prg_name ? prg_name + 1 : argv[0];
+
+      g_set_prgname (prg_name);
       g_autofree gchar *help = g_option_context_get_help (opt_ctx, TRUE, NULL);
       g_print ("%s", help);
       goto out;

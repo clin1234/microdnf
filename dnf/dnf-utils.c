@@ -48,7 +48,9 @@ dnf_utils_add_transaction_packages (struct libscols_table *tb,
       struct libscols_line *ln = scols_table_new_line (tb, parent);
       scols_line_set_data (ln, COL_NEVRA, dnf_package_get_nevra (pkg));
       scols_line_set_data (ln, COL_REPO, dnf_package_get_reponame (pkg));
-      scols_line_set_data (ln, COL_SIZE, g_format_size (dnf_package_get_size (pkg)));
+      char *formatted_pkg_size = g_format_size (dnf_package_get_size (pkg));
+      scols_line_set_data (ln, COL_SIZE, formatted_pkg_size);
+      g_free(formatted_pkg_size);
     }
 }
 
@@ -135,6 +137,7 @@ dnf_utils_print_transaction (DnfContext *ctx)
     }
 
   scols_print_table (tb);
+  scols_unref_symbols (sb);
   scols_unref_table (tb);
 
   g_print ("Transaction Summary:\n");
@@ -143,6 +146,11 @@ dnf_utils_print_transaction (DnfContext *ctx)
   g_print (" %-15s %4d packages\n", "Upgrading:", pkgs_upgrade->len);
   g_print (" %-15s %4d packages\n", "Removing:", pkgs_remove->len);
   g_print (" %-15s %4d packages\n", "Downgrading:", pkgs_downgrade->len);
+
+  /* check for test mode */
+  DnfTransaction *txn = dnf_context_get_transaction (ctx);
+  if (dnf_transaction_get_flags (txn) & DNF_TRANSACTION_FLAG_TEST)
+    g_print ("Test mode enabled: Microdnf will only download packages, install gpg keys, and check the transaction.\n");
 
   return TRUE;
 }
