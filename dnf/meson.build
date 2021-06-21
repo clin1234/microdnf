@@ -30,14 +30,23 @@ microdnf_srcs = [
   ),
   'plugins/remove/dnf-command-remove.c',
 
-  # update
+  # upgrade
   gnome.compile_resources(
-    'dnf-update',
-    'plugins/update/dnf-command-update.gresource.xml',
-    c_name : 'dnf_command_update',
-    source_dir : 'plugins/update',
+    'dnf-upgrade',
+    'plugins/upgrade/dnf-command-upgrade.gresource.xml',
+    c_name : 'dnf_command_upgrade',
+    source_dir : 'plugins/upgrade',
   ),
-  'plugins/update/dnf-command-update.c',
+  'plugins/upgrade/dnf-command-upgrade.c',
+
+  # distro-sync
+  gnome.compile_resources(
+    'dnf-distrosync',
+    'plugins/distrosync/dnf-command-distrosync.gresource.xml',
+    c_name : 'dnf_command_distrosync',
+    source_dir : 'plugins/distrosync',
+  ),
+  'plugins/distrosync/dnf-command-distrosync.c',
 
   # repolist
   gnome.compile_resources(
@@ -65,6 +74,24 @@ microdnf_srcs = [
     source_dir : 'plugins/clean',
   ),
   'plugins/clean/dnf-command-clean.c',
+
+  # download
+  gnome.compile_resources(
+    'dnf-download',
+    'plugins/download/dnf-command-download.gresource.xml',
+    c_name : 'dnf_command_download',
+    source_dir : 'plugins/download',
+  ),
+  'plugins/download/dnf-command-download.c',
+
+  # makecache
+  gnome.compile_resources(
+    'dnf-makecache',
+    'plugins/makecache/dnf-command-makecache.gresource.xml',
+    c_name : 'dnf_command_makecache',
+    source_dir : 'plugins/makecache',
+  ),
+  'plugins/makecache/dnf-command-makecache.c',
 
   # module enable
   gnome.compile_resources(

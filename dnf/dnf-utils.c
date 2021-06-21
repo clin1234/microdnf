@@ -7,7 +7,7 @@
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -69,6 +69,72 @@ dnf_utils_add_transaction_packages (DnfContext *ctx,
     }
 }
 
+
+gboolean
+dnf_utils_conf_main_get_bool_opt (const gchar *name, enum DnfConfPriority *priority)
+{
+    g_autofree gchar *tmp = dnf_conf_main_get_option (name, priority, NULL);
+    return tmp != NULL && (*tmp == '1' || *tmp == 'y' || *tmp == 'Y');
+}
+
+
+gboolean
+dnf_utils_userconfirm (void)
+{
+  gboolean ret;
+  enum DnfConfPriority priority;
+
+  // "assumeno" takes precedence over "assumeyes"
+  if (dnf_utils_conf_main_get_bool_opt ("assumeno", &priority))
+    ret = FALSE;
+  else if (dnf_utils_conf_main_get_bool_opt ("assumeyes", &priority))
+    ret = TRUE;
+  else
+    {
+      gboolean defaultyes = dnf_utils_conf_main_get_bool_opt ("defaultyes", &priority);
+
+      const char *msg;
+      if (defaultyes)
+        msg = "Is this ok [Y/n]: ";
+      else
+        msg = "Is this ok [y/N]: ";
+
+      while (TRUE)
+        {
+          g_print ("%s", msg);
+
+          char choice = getchar ();
+          if (choice == '\n' || choice == '\r')
+            {
+              ret = defaultyes;
+              break;
+            }
+
+          char second = getchar ();
+          for (char ch = second; ch != '\n'; ch = getchar ())
+            ;
+
+          if (second == '\n' || second == '\r')
+            {
+              if (choice == 'y' || choice == 'Y')
+                {
+                  ret = TRUE;
+                  break;
+                }
+              if (choice == 'n' || choice == 'N')
+                {
+                  ret = FALSE;
+                  break;
+                }
+            }
+        }
+    }
+
+    if (!ret)
+      g_print ("Operation aborted.\n");
+
+    return ret;
+}
 
 gboolean
 dnf_utils_print_transaction (DnfContext *ctx)

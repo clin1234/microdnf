@@ -3,11 +3,11 @@
  * Copyright © 2010-2015 Richard Hughes <richard@hughsie.com>
  * Copyright © 2016 Colin Walters <walters@verbum.org>
  * Copyright © 2016-2017 Igor Gnatenko <ignatenko@redhat.com>
- * Copyright © 2017-2020 Jaroslav Rohel <jrohel@redhat.com>
+ * Copyright © 2017-2021 Jaroslav Rohel <jrohel@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -26,11 +26,15 @@
 #include <libpeas/peas.h>
 #include <libdnf/libdnf.h>
 #include "dnf-command.h"
+#include "dnf-utils.h"
 
 typedef enum { ARG_DEFAULT, ARG_FALSE, ARG_TRUE } BoolArgs;
 
 static BoolArgs opt_install_weak_deps = ARG_DEFAULT;
-static gboolean opt_yes = TRUE;
+static BoolArgs opt_allow_vendor_change = ARG_DEFAULT;
+static BoolArgs opt_keepcache = ARG_DEFAULT;
+static gboolean opt_no = FALSE;
+static gboolean opt_yes = FALSE;
 static gboolean opt_nodocs = FALSE;
 static gboolean opt_best = FALSE;
 static gboolean opt_nobest = FALSE;
@@ -113,6 +117,10 @@ process_global_option (const gchar  *option_name,
                                      "Missing value in: %s", value);
           ret = FALSE;
         }
+      else if (strchr (setopt[0], '.'))
+        { /* repository option, pass to libdnf */
+          ret = dnf_conf_add_setopt (setopt[0], DNF_CONF_COMMANDLINE, setopt[1], &local_error);
+        }
       else if (strcmp (setopt[0], "tsflags") == 0)
         {
           g_auto(GStrv) tsflags = g_strsplit (setopt[1], ",", -1);
@@ -129,6 +137,20 @@ process_global_option (const gchar  *option_name,
                   ret = FALSE;
                   break;
                 }
+            }
+        }
+      else if (strcmp (setopt[0], "module_platform_id") == 0)
+        {
+          const char *module_platform_id = setopt[1];
+          if (module_platform_id[0] != '\0')
+            {
+              dnf_context_set_platform_module (ctx, module_platform_id);
+            }
+          else
+            {
+              local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                         "Empty value in: %s", value);
+              ret = FALSE;
             }
         }
       else if (strcmp (setopt[0], "cachedir") == 0)
@@ -158,6 +180,34 @@ process_global_option (const gchar  *option_name,
             opt_install_weak_deps = ARG_TRUE;
           else if (setopt_val[0] == '0' && setopt_val[1] == '\0')
             opt_install_weak_deps = ARG_FALSE;
+          else
+            {
+              local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                         "Invalid boolean value \"%s\" in: %s", setopt[1], value);
+              ret = FALSE;
+            }
+        }
+      else if (strcmp (setopt[0], "allow_vendor_change") == 0)
+        {
+          const char *setopt_val = setopt[1];
+          if (setopt_val[0] == '1' && setopt_val[1] == '\0')
+            opt_allow_vendor_change = ARG_TRUE;
+          else if (setopt_val[0] == '0' && setopt_val[1] == '\0')
+            opt_allow_vendor_change = ARG_FALSE;
+          else
+            {
+              local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
+                                         "Invalid boolean value \"%s\" in: %s", setopt[1], value);
+              ret = FALSE;
+            }
+        }
+      else if (strcmp (setopt[0], "keepcache") == 0)
+        {
+          const char *setopt_val = setopt[1];
+          if (setopt_val[0] == '1' && setopt_val[1] == '\0')
+            opt_keepcache = ARG_TRUE;
+          else if (setopt_val[0] == '0' && setopt_val[1] == '\0')
+            opt_keepcache = ARG_FALSE;
           else
             {
               local_error = g_error_new (G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE,
@@ -198,7 +248,8 @@ process_global_option (const gchar  *option_name,
 }
 
 static const GOptionEntry global_opts[] = {
-  { "assumeyes", 'y', G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, &opt_yes, "Does nothing, we always assume yes", NULL },
+  { "assumeno", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_no, "Automatically answer no for all questions", NULL },
+  { "assumeyes", 'y', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_yes, "Automatically answer yes for all questions", NULL },
   { "best", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_best, "Try the best available package versions in transactions", NULL },
   { "config", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Configuration file location", "<config file>" },
   { "disablerepo", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Disable repository by an id", "ID" },
@@ -212,7 +263,7 @@ static const GOptionEntry global_opts[] = {
   { "refresh", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_refresh, "Set metadata as expired before running the command", NULL },
   { "releasever", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option, "Override the value of $releasever in config and repo files", "RELEASEVER" },
   { "setopt", '\0', G_OPTION_FLAG_NONE, G_OPTION_ARG_CALLBACK, process_global_option,
-    "Override a configuration option (install_weak_deps=0/1, cachedir=<path>, reposdir=<path1>,<path2>,..., tsflags=nodocs/test, varsdir=<path1>,<path2>,...)", "<option>=<value>" },
+    "Override a configuration option (install_weak_deps=0/1, allow_vendor_change=0/1, keepcache=0/1, module_platform_id=<name:stream>, cachedir=<path>, reposdir=<path1>,<path2>,..., tsflags=nodocs/test, varsdir=<path1>,<path2>,..., repo_id.option_name=<value>)", "<option>=<value>" },
   { NULL }
 };
 
@@ -228,7 +279,6 @@ context_new (void)
 #undef CACHEDIR
   dnf_context_set_check_disk_space (ctx, FALSE);
   dnf_context_set_check_transaction (ctx, TRUE);
-  dnf_context_set_keep_cache (ctx, FALSE);
 
   /* Sets a maximum cache age in seconds. It is an upper limit.
    * The lower value between this value and "metadata_expire" value from repo/global
@@ -344,6 +394,8 @@ main (int   argc,
   g_autoptr(GOptionContext) subcmd_opt_ctx = NULL;
   g_autofree gchar *subcmd_opt_param = NULL;
   GSList *cmds_with_subcmds = NULL;  /* list of commands with subcommands */
+  /* dictionary of aliases for commands */
+  g_autoptr(GHashTable) cmds_aliases = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
 
   setlocale (LC_ALL, "");
 
@@ -383,6 +435,7 @@ main (int   argc,
       if (peas_engine_provides_extension (engine, info, DNF_TYPE_COMMAND))
         {
           g_autofree gchar *command_name = g_strdup (peas_plugin_info_get_name (info));
+          g_autofree gchar *command_alias_name = g_strdup (peas_plugin_info_get_external_data (info, "Alias-Name"));
 
           /* Plugins with a '_' character in command name implement subcommands.
              E.g. the "command_module_enable" plugin implements the "enable" subcommand of the "module" command. */
@@ -395,11 +448,21 @@ main (int   argc,
                   break;
                 }
             }
+
+          /* Add command alias to the dictionary. */
+          if (command_alias_name)
+              g_hash_table_insert (cmds_aliases, g_strdup (command_alias_name), g_strdup (command_name));
+
           /*
            * At least 2 spaces between the command and its description are needed
            * so that help2man formats it correctly.
            */
           g_string_append_printf (cmd_summary, "\n  %-16s     %s", command_name, peas_plugin_info_get_description (info));
+
+          /* If command has an alias with a description, add it to the help. */
+          const gchar *command_alias_description = peas_plugin_info_get_external_data (info, "Alias-Description");
+          if (command_alias_name && command_alias_description)
+            g_string_append_printf (cmd_summary, "\n  %-16s     %s", command_alias_name, command_alias_description);
         }
     }
   g_option_context_set_summary (opt_ctx, cmd_summary->str);
@@ -497,6 +560,16 @@ main (int   argc,
       else if (opt_install_weak_deps == ARG_FALSE)
         dnf_context_set_install_weak_deps (FALSE);
 
+      if (opt_allow_vendor_change == ARG_TRUE)
+        dnf_context_set_allow_vendor_change (TRUE);
+      else if (opt_allow_vendor_change == ARG_FALSE)
+        dnf_context_set_allow_vendor_change (FALSE);
+
+      if (opt_keepcache == ARG_TRUE)
+        dnf_context_set_keep_cache (ctx, TRUE);
+      else if (opt_keepcache == ARG_FALSE)
+        dnf_context_set_keep_cache (ctx, FALSE);
+
       if (opt_best && opt_nobest)
         {
           error = g_error_new_literal(G_OPTION_ERROR,
@@ -511,6 +584,16 @@ main (int   argc,
       else if (opt_nobest)
         {
           dnf_context_set_best(FALSE);
+        }
+
+      if (opt_no)
+        {
+          dnf_conf_main_set_option ("assumeno", DNF_CONF_COMMANDLINE, "1", NULL);
+        }
+
+      if (opt_yes)
+        {
+          dnf_conf_main_set_option ("assumeyes", DNF_CONF_COMMANDLINE, "1", NULL);
         }
     }
 
@@ -538,15 +621,17 @@ main (int   argc,
    * Command name (cmd_name) can not contain '_' character. It is reserved for subcomands. */
   if (cmd_name != NULL && strchr(cmd_name, '_') == NULL)
     {
-      with_subcmds = g_slist_find_custom (cmds_with_subcmds, cmd_name, compare_strings) != NULL;
-      g_autofree gchar *mod_name = g_strdup_printf ("command_%s", cmd_name);
+      const gchar *original_cmd_name = g_hash_table_lookup (cmds_aliases, cmd_name);
+      const gchar *search_cmd_name = original_cmd_name ? original_cmd_name : cmd_name;
+      with_subcmds = g_slist_find_custom (cmds_with_subcmds, search_cmd_name, compare_strings) != NULL;
+      g_autofree gchar *mod_name = g_strdup_printf ("command_%s", search_cmd_name);
       plug = peas_engine_get_plugin_info (engine, mod_name);
       if (plug == NULL && with_subcmds)
         {
           subcmd_name = get_command (&argc, argv);
           if (subcmd_name != NULL)
             {
-              g_autofree gchar *submod_name = g_strdup_printf ("command_%s_%s", cmd_name, subcmd_name);
+              g_autofree gchar *submod_name = g_strdup_printf ("command_%s_%s", search_cmd_name, subcmd_name);
               plug = peas_engine_get_plugin_info (engine, submod_name);
             }
         }

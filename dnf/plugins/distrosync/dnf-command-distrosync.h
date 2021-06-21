@@ -1,6 +1,6 @@
-/* dnf-command-remove.h
+/* dnf-command-distrosync.h
  *
- * Copyright © 2016 Igor Gnatenko <ignatenko@redhat.com>
+ * Copyright © 2021 Neal Gompa <ngompa13@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,9 +23,9 @@
 
 G_BEGIN_DECLS
 
-#define DNF_TYPE_COMMAND_REMOVE dnf_command_remove_get_type ()
-G_DECLARE_FINAL_TYPE (DnfCommandRemove, dnf_command_remove, DNF, COMMAND_REMOVE, PeasExtensionBase)
+#define DNF_TYPE_COMMAND_DISTROSYNC dnf_command_distrosync_get_type ()
+G_DECLARE_FINAL_TYPE (DnfCommandDistroSync, dnf_command_distrosync, DNF, COMMAND_DISTROSYNC, PeasExtensionBase)
 
-G_MODULE_EXPORT void dnf_command_remove_register_types (PeasObjectModule *module);
+G_MODULE_EXPORT void dnf_command_distrosync_register_types (PeasObjectModule *module);
 
 G_END_DECLS

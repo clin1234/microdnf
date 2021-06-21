@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 2.8.5)
 project (microdnf C)
-set (PROJECT_VERSION 3.5.0)
+set (PROJECT_VERSION 3.8.0)
 
 list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
@@ -18,7 +18,7 @@ find_package (PkgConfig REQUIRED)
 pkg_check_modules (GLIB REQUIRED glib-2.0>=2.44.0)
 pkg_check_modules (GOBJECT REQUIRED gobject-2.0>=2.44.0)
 pkg_check_modules (PEAS REQUIRED libpeas-1.0>=1.20.0)
-pkg_check_modules (LIBDNF REQUIRED libdnf>=0.55.0)
+pkg_check_modules (LIBDNF REQUIRED libdnf>=0.62.0)
 pkg_check_modules (SCOLS REQUIRED smartcols)
 
 set (PKG_LIBDIR ${CMAKE_INSTALL_FULL_LIBDIR}/dnf)

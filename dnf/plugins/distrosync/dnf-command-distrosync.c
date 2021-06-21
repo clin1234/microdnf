@@ -1,10 +1,10 @@
-/* dnf-command-update.c
+/* dnf-command-distrosync.c
  *
- * Copyright © 2016-2017 Igor Gnatenko <ignatenko@redhat.com>
+ * Copyright © 2021 Neal Gompa <ngompa13@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -16,35 +16,35 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "dnf-command-update.h"
+#include "dnf-command-distrosync.h"
 #include "dnf-utils.h"
 
-struct _DnfCommandUpdate
+struct _DnfCommandDistroSync
 {
   PeasExtensionBase parent_instance;
 };
 
-static void dnf_command_update_iface_init (DnfCommandInterface *iface);
+static void dnf_command_distrosync_iface_init (DnfCommandInterface *iface);
 
-G_DEFINE_DYNAMIC_TYPE_EXTENDED (DnfCommandUpdate,
-                                dnf_command_update,
+G_DEFINE_DYNAMIC_TYPE_EXTENDED (DnfCommandDistroSync,
+                                dnf_command_distrosync,
                                 PEAS_TYPE_EXTENSION_BASE,
                                 0,
                                 G_IMPLEMENT_INTERFACE (DNF_TYPE_COMMAND,
-                                                       dnf_command_update_iface_init))
+                                                       dnf_command_distrosync_iface_init))
 
 static void
-dnf_command_update_init (DnfCommandUpdate *self)
+dnf_command_distrosync_init (DnfCommandDistroSync *self)
 {
 }
 
 static gboolean
-dnf_command_update_run (DnfCommand      *cmd,
-                        int              argc,
-                        char            *argv[],
-                        GOptionContext  *opt_ctx,
-                        DnfContext      *ctx,
-                        GError         **error)
+dnf_command_distrosync_run (DnfCommand      *cmd,
+                            int              argc,
+                            char            *argv[],
+                            GOptionContext  *opt_ctx,
+                            DnfContext      *ctx,
+                            GError         **error)
 {
   g_auto(GStrv) pkgs = NULL;
   const GOptionEntry opts[] = {
@@ -58,15 +58,15 @@ dnf_command_update_run (DnfCommand      *cmd,
 
   if (pkgs == NULL)
     {
-      if (!dnf_context_update_all (ctx, error))
+      if (!dnf_context_distrosync_all (ctx, error))
         return FALSE;
     }
   else
     {
-      /* Update each package */
+      /* Sync each package */
       for (GStrv pkg = pkgs; *pkg != NULL; pkg++)
         {
-          if (!dnf_context_update (ctx, *pkg, error))
+          if (!dnf_context_distrosync (ctx, *pkg, error))
             return FALSE;
         }
     }
@@ -76,11 +76,13 @@ dnf_command_update_run (DnfCommand      *cmd,
       flags |= DNF_FORCE_BEST;
     }
   if (!dnf_context_get_install_weak_deps ())
-    flags |= DNF_IGNORE_WEAK_DEPS;  
+    flags |= DNF_IGNORE_WEAK_DEPS;
   if (!dnf_goal_depsolve (dnf_context_get_goal (ctx), flags, error))
     return FALSE;
   if (!dnf_utils_print_transaction (ctx))
     return TRUE;
+  if (!dnf_utils_userconfirm ())
+    return FALSE;
   if (!dnf_context_run (ctx, NULL, error))
     return FALSE;
   g_print ("Complete.\n");
@@ -89,27 +91,27 @@ dnf_command_update_run (DnfCommand      *cmd,
 }
 
 static void
-dnf_command_update_class_init (DnfCommandUpdateClass *klass)
+dnf_command_distrosync_class_init (DnfCommandDistroSyncClass *klass)
 {
 }
 
 static void
-dnf_command_update_iface_init (DnfCommandInterface *iface)
+dnf_command_distrosync_iface_init (DnfCommandInterface *iface)
 {
-  iface->run = dnf_command_update_run;
+  iface->run = dnf_command_distrosync_run;
 }
 
 static void
-dnf_command_update_class_finalize (DnfCommandUpdateClass *klass)
+dnf_command_distrosync_class_finalize (DnfCommandDistroSyncClass *klass)
 {
 }
 
 G_MODULE_EXPORT void
-dnf_command_update_register_types (PeasObjectModule *module)
+dnf_command_distrosync_register_types (PeasObjectModule *module)
 {
-  dnf_command_update_register_type (G_TYPE_MODULE (module));
+  dnf_command_distrosync_register_type (G_TYPE_MODULE (module));
 
   peas_object_module_register_extension_type (module,
                                               DNF_TYPE_COMMAND,
-                                              DNF_TYPE_COMMAND_UPDATE);
+                                              DNF_TYPE_COMMAND_DISTROSYNC);
 }

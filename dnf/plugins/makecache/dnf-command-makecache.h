@@ -1,10 +1,10 @@
-/* dnf-command-update.h
+/* dnf-command-makecache.h
  *
- * Copyright © 2016 Igor Gnatenko <ignatenko@redhat.com>
+ * Copyright (C) 2021 Red Hat, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -23,9 +23,9 @@
 
 G_BEGIN_DECLS
 
-#define DNF_TYPE_COMMAND_UPDATE dnf_command_update_get_type ()
-G_DECLARE_FINAL_TYPE (DnfCommandUpdate, dnf_command_update, DNF, COMMAND_UPDATE, PeasExtensionBase)
+#define DNF_TYPE_COMMAND_MAKECACHE dnf_command_makecache_get_type ()
+G_DECLARE_FINAL_TYPE (DnfCommandMakecache, dnf_command_makecache, DNF, COMMAND_MAKECACHE, PeasExtensionBase)
 
-G_MODULE_EXPORT void dnf_command_update_register_types (PeasObjectModule *module);
+G_MODULE_EXPORT void dnf_command_makecache_register_types (PeasObjectModule *module);
 
 G_END_DECLS

@@ -15,10 +15,15 @@ glib_compile_resources (DNF_COMMAND_REMOVE plugins/remove/dnf-command-remove.gre
                         INTERNAL)
 list (APPEND DNF_COMMAND_REMOVE "plugins/remove/dnf-command-remove.c")
 
-glib_compile_resources (DNF_COMMAND_UPDATE plugins/update/dnf-command-update.gresource.xml
-                        C_PREFIX dnf_command_update
+glib_compile_resources (DNF_COMMAND_UPGRADE plugins/upgrade/dnf-command-upgrade.gresource.xml
+                        C_PREFIX dnf_command_upgrade
                         INTERNAL)
-list (APPEND DNF_COMMAND_UPDATE "plugins/update/dnf-command-update.c")
+list (APPEND DNF_COMMAND_UPGRADE "plugins/upgrade/dnf-command-upgrade.c")
+
+glib_compile_resources (DNF_COMMAND_DISTROSYNC plugins/distrosync/dnf-command-distrosync.gresource.xml
+                        C_PREFIX dnf_command_distrosync
+                        INTERNAL)
+list (APPEND DNF_COMMAND_DISTROSYNC "plugins/distrosync/dnf-command-distrosync.c")
 
 glib_compile_resources (DNF_COMMAND_REPOLIST plugins/repolist/dnf-command-repolist.gresource.xml
                         C_PREFIX dnf_command_repolist
@@ -34,6 +39,16 @@ glib_compile_resources (DNF_COMMAND_CLEAN plugins/clean/dnf-command-clean.gresou
                         C_PREFIX dnf_command_clean
                         INTERNAL)
 list (APPEND DNF_COMMAND_CLEAN "plugins/clean/dnf-command-clean.c")
+
+glib_compile_resources (DNF_COMMAND_DOWNLOAD plugins/download/dnf-command-download.gresource.xml
+                        C_PREFIX dnf_command_download
+                        INTERNAL)
+list (APPEND DNF_COMMAND_DOWNLOAD "plugins/download/dnf-command-download.c")
+
+glib_compile_resources (DNF_COMMAND_MAKECACHE plugins/makecache/dnf-command-makecache.gresource.xml
+                        C_PREFIX dnf_command_makecache
+                        INTERNAL)
+list (APPEND DNF_COMMAND_MAKECACHE "plugins/makecache/dnf-command-makecache.c")
 
 glib_compile_resources (DNF_COMMAND_MODULE_ENABLE plugins/module_enable/dnf-command-module_enable.gresource.xml
                         C_PREFIX dnf_command_module_enable
@@ -56,10 +71,13 @@ add_executable (microdnf dnf-main.c ${DNF_SRCS}
                 ${DNF_COMMAND_INSTALL}
                 ${DNF_COMMAND_REINSTALL}
                 ${DNF_COMMAND_REMOVE}
-                ${DNF_COMMAND_UPDATE}
+                ${DNF_COMMAND_UPGRADE}
+                ${DNF_COMMAND_DISTROSYNC}
                 ${DNF_COMMAND_REPOLIST}
                 ${DNF_COMMAND_REPOQUERY}
                 ${DNF_COMMAND_CLEAN}
+                ${DNF_COMMAND_DOWNLOAD}
+                ${DNF_COMMAND_MAKECACHE}
                 ${DNF_COMMAND_MODULE_ENABLE}
                 ${DNF_COMMAND_MODULE_DISABLE}
                 ${DNF_COMMAND_MODULE_RESET})

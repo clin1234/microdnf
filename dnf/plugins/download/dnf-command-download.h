@@ -1,6 +1,6 @@
-/* dnf-command-remove.h
+/* dnf-command-download.h
  *
- * Copyright © 2016 Igor Gnatenko <ignatenko@redhat.com>
+ * Copyright © 2020-2021 Daniel Hams <daniel.hams@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,9 +23,9 @@
 
 G_BEGIN_DECLS
 
-#define DNF_TYPE_COMMAND_REMOVE dnf_command_remove_get_type ()
-G_DECLARE_FINAL_TYPE (DnfCommandRemove, dnf_command_remove, DNF, COMMAND_REMOVE, PeasExtensionBase)
+#define DNF_TYPE_COMMAND_DOWNLOAD dnf_command_download_get_type ()
+G_DECLARE_FINAL_TYPE (DnfCommandDownload, dnf_command_download, DNF, COMMAND_DOWNLOAD, PeasExtensionBase)
 
-G_MODULE_EXPORT void dnf_command_remove_register_types (PeasObjectModule *module);
+G_MODULE_EXPORT void dnf_command_download_register_types (PeasObjectModule *module);
 
 G_END_DECLS
